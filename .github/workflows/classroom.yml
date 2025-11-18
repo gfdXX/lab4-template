@@ -51,33 +51,40 @@ jobs:
 
       - name: Build and push images
         run: |
+          set -e
           export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
           export DOCKER_IMAGE_BASE=$DOCKER_USERNAME/car-rental-service
-          
+
+          # Derive a deterministic docker compose project name (lowercase, alphanumeric + dash)
+          PROJECT_NAME=$(basename "$GITHUB_WORKSPACE")
+          PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+          PROJECT_NAME=$(echo "$PROJECT_NAME" | sed -E 's/[^a-z0-9]+/-/g')
+          export COMPOSE_PROJECT_NAME=$PROJECT_NAME
+
           # Build images with docker compose
           docker compose build
-          
-          # Get the actual image names from docker compose
-          CARS_IMAGE=$(docker compose images -q cars-service)
-          RENTAL_IMAGE=$(docker compose images -q rental-service)
-          PAYMENT_IMAGE=$(docker compose images -q payment-service)
-          GATEWAY_IMAGE=$(docker compose images -q gateway-service)
-          
+
+          # Compose will tag images as <project>-<service>:latest
+          CARS_IMAGE=${COMPOSE_PROJECT_NAME}-cars-service:latest
+          RENTAL_IMAGE=${COMPOSE_PROJECT_NAME}-rental-service:latest
+          PAYMENT_IMAGE=${COMPOSE_PROJECT_NAME}-payment-service:latest
+          GATEWAY_IMAGE=${COMPOSE_PROJECT_NAME}-gateway-service:latest
+
           # Tag and push cars-service
-          docker tag $CARS_IMAGE $DOCKER_IMAGE_BASE-cars:latest
-          docker push $DOCKER_IMAGE_BASE-cars:latest
-          
+          docker tag "$CARS_IMAGE" "$DOCKER_IMAGE_BASE-cars:latest"
+          docker push "$DOCKER_IMAGE_BASE-cars:latest"
+
           # Tag and push rental-service
-          docker tag $RENTAL_IMAGE $DOCKER_IMAGE_BASE-rental:latest
-          docker push $DOCKER_IMAGE_BASE-rental:latest
-          
+          docker tag "$RENTAL_IMAGE" "$DOCKER_IMAGE_BASE-rental:latest"
+          docker push "$DOCKER_IMAGE_BASE-rental:latest"
+
           # Tag and push payment-service
-          docker tag $PAYMENT_IMAGE $DOCKER_IMAGE_BASE-payment:latest
-          docker push $DOCKER_IMAGE_BASE-payment:latest
-          
+          docker tag "$PAYMENT_IMAGE" "$DOCKER_IMAGE_BASE-payment:latest"
+          docker push "$DOCKER_IMAGE_BASE-payment:latest"
+
           # Tag and push gateway-service
-          docker tag $GATEWAY_IMAGE $DOCKER_IMAGE_BASE-gateway:latest
-          docker push $DOCKER_IMAGE_BASE-gateway:latest
+          docker tag "$GATEWAY_IMAGE" "$DOCKER_IMAGE_BASE-gateway:latest"
+          docker push "$DOCKER_IMAGE_BASE-gateway:latest"
 
   deploy:
     name: Deploy to Kubernetes
