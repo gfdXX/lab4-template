@@ -2,13 +2,14 @@ name: GitHub Classroom Workflow
 on:
   push:
     branches:
-      - master
+      - test
   pull_request:
     branches:
-      - master
+      - test
+
 jobs:
-  build:
-    name: Autograding
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,18 +18,155 @@ jobs:
 
       - uses: docker/setup-buildx-action@v2
 
-      # TODO build and run unit tests
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-      - name: Build images
-        timeout-minutes: 10
-        run: docker compose build --push
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # TODO deploy to k8s with liveness and readyness probes
+      - name: Run unit tests
+        run: |
+          python -m pytest services/ -v
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push images
+        run: |
+          export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+          export DOCKER_IMAGE_BASE=$DOCKER_USERNAME/car-rental-service
+          
+          # Build images with docker compose
+          docker compose build
+          
+          # Get the actual image names from docker compose
+          CARS_IMAGE=$(docker compose images -q cars-service)
+          RENTAL_IMAGE=$(docker compose images -q rental-service)
+          PAYMENT_IMAGE=$(docker compose images -q payment-service)
+          GATEWAY_IMAGE=$(docker compose images -q gateway-service)
+          
+          # Tag and push cars-service
+          docker tag $CARS_IMAGE $DOCKER_IMAGE_BASE-cars:latest
+          docker push $DOCKER_IMAGE_BASE-cars:latest
+          
+          # Tag and push rental-service
+          docker tag $RENTAL_IMAGE $DOCKER_IMAGE_BASE-rental:latest
+          docker push $DOCKER_IMAGE_BASE-rental:latest
+          
+          # Tag and push payment-service
+          docker tag $PAYMENT_IMAGE $DOCKER_IMAGE_BASE-payment:latest
+          docker push $DOCKER_IMAGE_BASE-payment:latest
+          
+          # Tag and push gateway-service
+          docker tag $GATEWAY_IMAGE $DOCKER_IMAGE_BASE-gateway:latest
+          docker push $DOCKER_IMAGE_BASE-gateway:latest
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+          export KUBECONFIG=./kubeconfig
+          kubectl config set-context --current --namespace=test
+
+      - name: Deploy PostgreSQL
+        run: |
+          export KUBECONFIG=./kubeconfig
+          helm upgrade --install postgres ./helm/postgres-chart \
+            --namespace test \
+            --create-namespace \
+            --wait
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          export KUBECONFIG=./kubeconfig
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres-chart -n test --timeout=5m
+
+      - name: Run database initialization job
+        run: |
+          export KUBECONFIG=./kubeconfig
+          # Wait for postgres to be ready first
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres-chart -n test --timeout=5m
+          # Wait for init job to complete
+          kubectl wait --for=condition=complete job/postgres-chart-init -n test --timeout=5m || true
+
+      - name: Deploy Cars Service
+        run: |
+          export KUBECONFIG=./kubeconfig
+          helm upgrade --install cars-service ./helm/service-chart \
+            --namespace test \
+            -f ./helm/values/cars-service.yaml \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
+            --set image.tag=latest-cars \
+            --wait
+
+      - name: Deploy Payment Service
+        run: |
+          export KUBECONFIG=./kubeconfig
+          helm upgrade --install payment-service ./helm/service-chart \
+            --namespace test \
+            -f ./helm/values/payment-service.yaml \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
+            --set image.tag=latest-payment \
+            --wait
+
+      - name: Deploy Rental Service
+        run: |
+          export KUBECONFIG=./kubeconfig
+          helm upgrade --install rental-service ./helm/service-chart \
+            --namespace test \
+            -f ./helm/values/rental-service.yaml \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
+            --set image.tag=latest-rental \
+            --wait
+
+      - name: Deploy Gateway Service
+        run: |
+          export KUBECONFIG=./kubeconfig
+          helm upgrade --install gateway-service ./helm/service-chart \
+            --namespace test \
+            -f ./helm/values/gateway-service.yaml \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
+            --set image.tag=latest-gateway \
+            --wait
 
       - name: Wait before services are ready
-        run: kubectl wait -n test -l app.kubernetes.io/name=gateway pod --for=condition=Ready --timeout 3m
-      
-      # TODO setup parameters in classroom/autograding.json
+        run: |
+          export KUBECONFIG=./kubeconfig
+          kubectl wait -n test -l app.kubernetes.io/name=gateway-service pod --for=condition=Ready --timeout=3m
       
       - name: Autograding
         uses: education/autograding@v1

@@ -1,0 +1,28 @@
+fullnameOverride: gateway-service
+
+image:
+  repository: ""  # Will be set in CI/CD
+  tag: "latest"
+
+service:
+  port: 8080
+
+env:
+  - name: CARS_SERVICE_URL
+    value: "http://cars-service:8070"
+  - name: RENTAL_SERVICE_URL
+    value: "http://rental-service:8060"
+  - name: PAYMENT_SERVICE_URL
+    value: "http://payment-service:8050"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: ""  # Will be set based on cluster ingress
+      paths:
+        - path: /
+          pathType: Prefix
+

@@ -1,0 +1,13 @@
+fullnameOverride: rental-service
+
+image:
+  repository: ""  # Will be set in CI/CD
+  tag: "latest"
+
+service:
+  port: 8060
+
+env:
+  - name: DATABASE_URL
+    value: "postgresql://program:test@postgres:5432/rentals"
+
