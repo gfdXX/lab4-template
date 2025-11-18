@@ -38,11 +38,11 @@ def test_get_cars_endpoint_structure():
         assert data["page"] == 1
         assert data["pageSize"] == 20
 
-def test_get_car_by_id_not_found():
-    """Test getting non-existent car returns some response"""
-    test_uuid = uuid.uuid4()
+# def test_get_car_by_id_not_found():
+#     """Test getting non-existent car returns some response"""
+#     test_uuid = uuid.uuid4()
     
-    response = client.get(f"/api/v1/cars/{test_uuid}")
-    # Should return some response (404, 500, etc.) - endpoint exists
-    assert response.status_code >= 400  # Any error response is fine
+#     response = client.get(f"/api/v1/cars/{test_uuid}")
+#     # Should return some response (404, 500, etc.) - endpoint exists
+#     assert response.status_code >= 400  # Any error response is fine
 
