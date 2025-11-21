@@ -8,6 +8,9 @@ image:
   pullPolicy: IfNotPresent
   tag: "latest"
 
+command: []
+args: []
+
 service:
   type: ClusterIP
   port: 8080
