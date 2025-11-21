@@ -115,9 +115,10 @@ async def get_rentals(
             raise HTTPException(status_code=response.status_code, detail="Rental service error")
         
         rental_data = response.json()
+        items = rental_data.get("items", rental_data if isinstance(rental_data, list) else [])
         
         # Aggregate data from other services
-        for item in rental_data["items"]:
+        for item in items:
             # Get car info
             try:
                 car_response = requests.get(f"{CARS_SERVICE_URL}/api/v1/cars/{item['carUid']}")
@@ -144,7 +145,7 @@ async def get_rentals(
             except:
                 item["payment"] = {}
         
-        return rental_data
+        return items
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Rental service unavailable")
 
