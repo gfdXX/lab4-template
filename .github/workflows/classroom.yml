@@ -174,6 +174,40 @@ jobs:
         run: |
           export KUBECONFIG=./kubeconfig
           kubectl rollout status deployment/gateway-service -n test --timeout=3m
+
+      - name: Start port-forward to gateway
+        run: |
+          export KUBECONFIG=./kubeconfig
+          nohup kubectl port-forward service/gateway-service -n test 8080:8080 > port-forward.log 2>&1 &
+          echo $! > port-forward.pid
+          for i in $(seq 1 30); do
+            if nc -z localhost 8080; then
+              echo "Port-forward is ready."
+              exit 0
+            fi
+            if ! kill -0 $(cat port-forward.pid) 2>/dev/null; then
+              echo "Port-forward process exited unexpectedly."
+              cat port-forward.log
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Port-forward did not become ready in time."
+          cat port-forward.log
+          exit 1
       
       - name: Autograding
         uses: education/autograding@v1
+
+      - name: Stop port-forward
+        if: always()
+        run: |
+          if [ -f port-forward.pid ]; then
+            kill $(cat port-forward.pid) >/dev/null 2>&1 || true
+            rm -f port-forward.pid
+          fi
+          if [ -f port-forward.log ]; then
+            echo "Port-forward log:"
+            cat port-forward.log
+            rm -f port-forward.log
+          fi
