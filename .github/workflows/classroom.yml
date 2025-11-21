@@ -120,15 +120,15 @@ jobs:
       - name: Wait for PostgreSQL to be ready
         run: |
           export KUBECONFIG=./kubeconfig
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres-chart -n test --timeout=5m
+          kubectl rollout status deployment/postgres -n test --timeout=5m
 
       - name: Run database initialization job
         run: |
           export KUBECONFIG=./kubeconfig
           # Wait for postgres to be ready first
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres-chart -n test --timeout=5m
+          kubectl rollout status deployment/postgres -n test --timeout=5m
           # Wait for init job to complete
-          kubectl wait --for=condition=complete job/postgres-chart-init -n test --timeout=5m || true
+          kubectl wait --for=condition=complete job/postgres-init -n test --timeout=5m || true
 
       - name: Deploy Cars Service
         run: |

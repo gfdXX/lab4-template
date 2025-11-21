@@ -18,7 +18,7 @@ spec:
         env:
         - name: PGPASSWORD
           value: {{ .Values.postgres.password | quote }}
-        command: ["bash", "-c", "chmod +x /init-databases.sh && /init-databases.sh"]
+        command: ["bash", "-c", "/init-databases.sh"]
         volumeMounts:
         - name: init-script
           mountPath: /init-databases.sh
