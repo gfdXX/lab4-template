@@ -136,8 +136,8 @@ jobs:
           helm upgrade --install cars-service ./helm/service-chart \
             --namespace test \
             -f ./helm/values/cars-service.yaml \
-            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
-            --set image.tag=latest-cars \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service-cars \
+            --set image.tag=latest \
             --wait
 
       - name: Deploy Payment Service
@@ -146,8 +146,8 @@ jobs:
           helm upgrade --install payment-service ./helm/service-chart \
             --namespace test \
             -f ./helm/values/payment-service.yaml \
-            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
-            --set image.tag=latest-payment \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service-payment \
+            --set image.tag=latest \
             --wait
 
       - name: Deploy Rental Service
@@ -156,8 +156,8 @@ jobs:
           helm upgrade --install rental-service ./helm/service-chart \
             --namespace test \
             -f ./helm/values/rental-service.yaml \
-            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
-            --set image.tag=latest-rental \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service-rental \
+            --set image.tag=latest \
             --wait
 
       - name: Deploy Gateway Service
@@ -166,8 +166,8 @@ jobs:
           helm upgrade --install gateway-service ./helm/service-chart \
             --namespace test \
             -f ./helm/values/gateway-service.yaml \
-            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service \
-            --set image.tag=latest-gateway \
+            --set image.repository=${{ secrets.DOCKER_USERNAME }}/car-rental-service-gateway \
+            --set image.tag=latest \
             --wait
 
       - name: Wait before services are ready
