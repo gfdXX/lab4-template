@@ -92,7 +92,7 @@ jobs:
     needs: build-and-push
     env:
       VARIANT: v3
-      DEPLOYMENT_NAME: gateway-service
+      DEPLOYMENT_NAME: payment-service
       NAMESPACE: test
       KUBECONFIG: ${{ github.workspace }}/kubeconfig
     steps:
