@@ -113,6 +113,8 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
           export KUBECONFIG=./kubeconfig
           kubectl config set-context --current --namespace=test
+          mkdir -p $HOME/.kube
+          cp kubeconfig $HOME/.kube/config
 
       - name: Deploy PostgreSQL
         run: |
