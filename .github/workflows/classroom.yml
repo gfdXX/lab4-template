@@ -90,6 +90,10 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: build-and-push
+    env:
+      VARIANT: v3
+      DEPLOYMENT_NAME: gateway-service
+      NAMESPACE: test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,7 +199,25 @@ jobs:
           echo "Port-forward did not become ready in time."
           cat port-forward.log
           exit 1
-      
+      - name: Clean previous rentals
+        run: |
+          set -e
+          CAR_UID="109b42f3-198d-4c89-9276-a7520a7120ab"
+          USERNAME="Test Max"
+          echo "Releasing car ${CAR_UID}"
+          curl -s -X PATCH "http://localhost:8070/api/v1/cars/${CAR_UID}/availability?available=true" > /dev/null || true
+          
+          rentals=$(curl -s -H "X-User-Name: ${USERNAME}" "http://localhost:8080/api/v1/rental" || echo "[]")
+          if echo "${rentals}" | jq empty >/dev/null 2>&1; then
+            ids=$(echo "${rentals}" | jq -r '.[] | select(.status != "CANCELED") | .rentalUid')
+            for id in $ids; do
+              echo "Cancelling leftover rental ${id}"
+              curl -s -o /dev/null -X DELETE -H "X-User-Name: ${USERNAME}" "http://localhost:8080/api/v1/rental/${id}" || true
+            done
+          else
+            echo "Gateway returned invalid JSON, skipping rental cleanup"
+          fi
+
       - name: Autograding
         uses: education/autograding@v1
 
