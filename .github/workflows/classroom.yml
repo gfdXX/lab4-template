@@ -209,11 +209,23 @@ jobs:
           
           rentals=$(curl -s -H "X-User-Name: ${USERNAME}" "http://localhost:8080/api/v1/rental" || echo "[]")
           if echo "${rentals}" | jq empty >/dev/null 2>&1; then
-            ids=$(echo "${rentals}" | jq -r '.[] | select(.status != "CANCELED") | .rentalUid')
-            for id in $ids; do
-              echo "Cancelling leftover rental ${id}"
-              curl -s -o /dev/null -X DELETE -H "X-User-Name: ${USERNAME}" "http://localhost:8080/api/v1/rental/${id}" || true
-            done
+            ids=$(echo "${rentals}" | jq -r '
+              def rentals_array:
+                if type == "array" then .
+                elif type == "object" and has("items") then .items
+                else []
+                end;
+              rentals_array
+              | map(select(.status != "CANCELED") | .rentalUid)
+              | .[]?')
+            if [ -n "${ids}" ]; then
+              for id in $ids; do
+                echo "Cancelling leftover rental ${id}"
+                curl -s -o /dev/null -X DELETE -H "X-User-Name: ${USERNAME}" "http://localhost:8080/api/v1/rental/${id}" || true
+              done
+            else
+              echo "No active rentals found"
+            fi
           else
             echo "Gateway returned invalid JSON, skipping rental cleanup"
           fi
