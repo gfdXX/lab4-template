@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, desc
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -98,7 +98,7 @@ async def get_rentals(
     db: Session = Depends(get_db)
 ):
     """Get all rentals for user"""
-    query = db.query(Rental).filter(Rental.username == username)
+    query = db.query(Rental).filter(Rental.username == username).order_by(desc(Rental.id))
     total = query.count()
     rentals = query.offset(page * page_size).limit(page_size).all()
     
