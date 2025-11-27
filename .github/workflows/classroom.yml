@@ -94,6 +94,7 @@ jobs:
       VARIANT: v3
       DEPLOYMENT_NAME: gateway-service
       NAMESPACE: test
+      KUBECONFIG: ${{ github.workspace }}/kubeconfig
     steps:
       - uses: actions/checkout@v4
         with:
