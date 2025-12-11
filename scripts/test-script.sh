@@ -26,7 +26,7 @@ timed() {
 success() {
   newman run \
     --delay-request=100 \
-    --folder="Gateway API" \
+    --folder=success \
     --export-environment "$variant"/postman/environment.json \
     --environment "$variant"/postman/environment.json \
     "$variant"/postman/collection.json
@@ -42,7 +42,7 @@ step() {
 
   newman run \
     --delay-request=100 \
-    --folder="Gateway API" \
+    --folder=step"$step" \
     --export-environment "$variant"/postman/environment.json \
     --environment "$variant"/postman/environment.json \
     "$variant"/postman/collection.json

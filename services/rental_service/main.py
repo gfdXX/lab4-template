@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Response
+from fastapi import FastAPI, HTTPException, Depends, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, desc
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 import uuid
 from uuid import UUID
 import os
-from services.auth import AuthenticatedUser, get_current_user
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://program:test@localhost:5432/rentals")
@@ -82,19 +81,24 @@ def get_db():
     finally:
         db.close()
 
+def get_username(x_user_name: str = Header(None)):
+    if not x_user_name:
+        raise HTTPException(status_code=400, detail="X-User-Name header is required")
+    return x_user_name
+
 @app.get("/manage/health")
 async def health_check():
     return {"status": "OK"}
 
 @app.get("/api/v1/rental", response_model=RentalListResponse)
 async def get_rentals(
-    user: AuthenticatedUser = Depends(get_current_user),
+    username: str = Depends(get_username),
     page: int = 0,
     page_size: int = 20,
     db: Session = Depends(get_db)
 ):
     """Get all rentals for user"""
-    query = db.query(Rental).filter(Rental.username == user.username).order_by(desc(Rental.id))
+    query = db.query(Rental).filter(Rental.username == username).order_by(desc(Rental.id))
     total = query.count()
     rentals = query.offset(page * page_size).limit(page_size).all()
     
@@ -119,13 +123,13 @@ async def get_rentals(
 @app.get("/api/v1/rental/{rental_uid}", response_model=RentalResponse)
 async def get_rental(
     rental_uid: UUID,
-    user: AuthenticatedUser = Depends(get_current_user),
+    username: str = Depends(get_username),
     db: Session = Depends(get_db)
 ):
     """Get rental by UID"""
     rental = db.query(Rental).filter(
         Rental.rental_uid == rental_uid,
-        Rental.username == user.username
+        Rental.username == username
     ).first()
     
     if not rental:
@@ -149,11 +153,11 @@ class CreateRentalRequest(BaseModel):
 @app.post("/api/v1/rental", response_model=RentalResponse)
 async def create_rental(
     rental_request: CreateRentalRequest,
-    user: AuthenticatedUser = Depends(get_current_user),
+    username: str = Depends(get_username),
     db: Session = Depends(get_db)
 ):
     """Create new rental record"""
-    print(f"Creating rental for car {rental_request.carUid}, user {user.username}")
+    print(f"Creating rental for car {rental_request.carUid}, user {username}")
     
     # Parse dates
     try:
@@ -180,7 +184,7 @@ async def create_rental(
     
     # Create rental record
     rental = Rental(
-        username=user.username,
+        username=username,
         payment_uid=UUID(rental_request.paymentUid),
         car_uid=UUID(rental_request.carUid),
         date_from=date_from,
@@ -204,13 +208,13 @@ async def create_rental(
 @app.post("/api/v1/rental/{rental_uid}/finish")
 async def finish_rental(
     rental_uid: UUID,
-    user: AuthenticatedUser = Depends(get_current_user),
+    username: str = Depends(get_username),
     db: Session = Depends(get_db)
 ):
     """Finish rental"""
     rental = db.query(Rental).filter(
         Rental.rental_uid == rental_uid,
-        Rental.username == user.username
+        Rental.username == username
     ).first()
     
     if not rental:
@@ -228,13 +232,13 @@ async def finish_rental(
 @app.delete("/api/v1/rental/{rental_uid}")
 async def cancel_rental(
     rental_uid: UUID,
-    user: AuthenticatedUser = Depends(get_current_user),
+    username: str = Depends(get_username),
     db: Session = Depends(get_db)
 ):
     """Cancel rental"""
     rental = db.query(Rental).filter(
         Rental.rental_uid == rental_uid,
-        Rental.username == user.username
+        Rental.username == username
     ).first()
     
     if not rental:

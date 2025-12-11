@@ -4,9 +4,6 @@ from unittest.mock import patch, MagicMock
 import uuid
 import os
 from datetime import datetime
-from services.test_utils import ensure_test_jwks, auth_headers
-
-ensure_test_jwks()
 
 # Set test environment variable to avoid database connection
 os.environ['DATABASE_URL'] = 'sqlite:///test.db'
@@ -25,7 +22,7 @@ def test_health_check():
 
 def test_get_cars_endpoint_structure():
     """Test cars endpoint exists and returns some response"""
-    response = client.get("/api/v1/cars?page=1&pageSize=20&showAll=false", headers=auth_headers())
+    response = client.get("/api/v1/cars?page=1&pageSize=20&showAll=false")
     
     # Should return some response (200, 500, etc.) - endpoint exists
     assert response.status_code in [200, 500]  # Either success or database error is fine

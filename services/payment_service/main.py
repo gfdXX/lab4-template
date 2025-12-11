@@ -9,7 +9,6 @@ from typing import List, Optional
 import uuid
 from uuid import UUID
 import os
-from services.auth import AuthenticatedUser, get_current_user
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://program:test@localhost:5432/payments")
@@ -82,11 +81,7 @@ async def health_check():
     return {"status": "OK"}
 
 @app.get("/api/v1/payments/{payment_uid}", response_model=PaymentResponse)
-async def get_payment(
-    payment_uid: UUID,
-    db: Session = Depends(get_db),
-    user: AuthenticatedUser = Depends(get_current_user),
-):
+async def get_payment(payment_uid: UUID, db: Session = Depends(get_db)):
     """Get payment by UID"""
     payment = db.query(Payment).filter(Payment.payment_uid == payment_uid).first()
     if not payment:
@@ -99,11 +94,7 @@ async def get_payment(
     )
 
 @app.post("/api/v1/payments", response_model=PaymentResponse, status_code=201)
-async def create_payment(
-    payment_request: PaymentRequest,
-    db: Session = Depends(get_db),
-    user: AuthenticatedUser = Depends(get_current_user),
-):
+async def create_payment(payment_request: PaymentRequest, db: Session = Depends(get_db)):
     """Create new payment"""
     payment = Payment(
         price=payment_request.price,
@@ -121,11 +112,7 @@ async def create_payment(
     )
 
 @app.delete("/api/v1/payments/{payment_uid}")
-async def cancel_payment(
-    payment_uid: UUID,
-    db: Session = Depends(get_db),
-    user: AuthenticatedUser = Depends(get_current_user),
-):
+async def cancel_payment(payment_uid: UUID, db: Session = Depends(get_db)):
     """Cancel payment"""
     payment = db.query(Payment).filter(Payment.payment_uid == payment_uid).first()
     if not payment:
