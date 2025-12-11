@@ -1,8 +1,11 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from services.gateway_service.main import app
 import uuid
+from services.test_utils import ensure_test_jwks, auth_headers
+
+ensure_test_jwks()
+from services.gateway_service.main import app
 
 client = TestClient(app)
 
@@ -15,8 +18,8 @@ def test_health_check():
 def test_get_rentals_missing_header():
     """Test rentals endpoint without required X-User-Name header"""
     response = client.get("/api/v1/rental")
-    assert response.status_code == 400
-    assert "X-User-Name header is required" in response.json()["detail"]
+    assert response.status_code == 401
+    assert "Authorization header" in response.json()["detail"]
 
 def test_get_cars_through_gateway():
     """Test cars endpoint through gateway with mocked service response"""
@@ -44,7 +47,10 @@ def test_get_cars_through_gateway():
         mock_response.json.return_value = mock_cars_data
         mock_get.return_value = mock_response
         
-        response = client.get("/api/v1/cars?page=1&size=20&show_all=false")
+        response = client.get(
+            "/api/v1/cars?page=1&size=20&show_all=false",
+            headers=auth_headers(),
+        )
         
         assert response.status_code == 200
         data = response.json()
@@ -141,7 +147,7 @@ def test_create_rental_through_gateway():
         response = client.post(
             "/api/v1/rental", 
             json=rental_data, 
-            headers={"X-User-Name": "testuser"}
+            headers=auth_headers()
         )
         
         assert response.status_code == 200

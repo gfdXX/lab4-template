@@ -1,51 +1,44 @@
 {
-	"id": "a7ec827a-303f-4fad-972e-ee60c7b66efe",
-	"name": "[rsoi][local] Car Rental System",
-	"values": [
-		{
-			"type": "text",
-			"key": "baseUrl",
-			"value": "http://localhost:8080",
-			"enabled": true
-		},
-		{
-			"type": "text",
-			"key": "carUid",
-			"value": "109b42f3-198d-4c89-9276-a7520a7120ab",
-			"enabled": true
-		},
-		{
-			"type": "text",
-			"key": "username",
-			"value": "Test Max",
-			"enabled": true
-		},
-		{
-			"type": "any",
-			"key": "rentalPrice",
-			"value": 3500,
-			"enabled": true
-		},
-		{
-			"type": "text",
-			"key": "dateFrom",
-			"value": "2021-10-08",
-			"enabled": true
-		},
-		{
-			"type": "text",
-			"key": "dateTo",
-			"value": "2021-10-11",
-			"enabled": true
-		},
-		{
-			"type": "text",
-			"key": "rentalUid",
-			"value": "eaa09775-9de2-43a0-ab20-b9aa4e406b7a",
-			"enabled": true
-		}
-	],
-	"_postman_variable_scope": "environment",
-	"_postman_exported_at": "2021-10-15T18:18:12.152Z",
-	"_postman_exported_using": "Postman/9.0.5"
+  "id": "acc90f86-88ad-444e-924e-6f48f6ee7711",
+  "name": "[rsoi][lab5] Car Rental System",
+  "values": [
+    {
+      "key": "serviceUrl",
+      "value": "http://localhost:8080",
+      "enabled": true
+    },
+    {
+      "key": "identityProviderUrl",
+      "value": "https://dev-x72evwvlbitajlk0.us.auth0.com",
+      "enabled": true
+    },
+    {
+      "key": "username",
+      "value": "salgikda@gmail.com",
+      "enabled": true
+    },
+    {
+      "key": "password",
+      "value": "6UwQQYX!djfqXSd",
+      "enabled": true
+    },
+    {
+      "key": "clientId",
+      "value": "pqn53cnXeQEFQW7xk5RHc0NsbRP6cEeQ",
+      "enabled": true
+    },
+    {
+      "key": "clientSecret",
+      "value": "KGMAve77s3mF2oT8XBznOMnUELvc23FNjT4iLk3N3JJzISLe85jq8R9iG9u84gBw",
+      "enabled": true
+    },
+    {
+      "key": "audience",
+      "value": "https://dev-x72evwvlbitajlk0.us.auth0.com/api/v2/",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2021-10-15T18:17:23.977Z",
+  "_postman_exported_using": "Postman/9.0.5"
 }

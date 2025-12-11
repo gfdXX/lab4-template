@@ -9,6 +9,7 @@ from typing import List, Optional
 import uuid
 from uuid import UUID
 import os
+from services.auth import AuthenticatedUser, get_current_user
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://program:test@localhost:5432/cars")
@@ -91,7 +92,8 @@ async def get_cars(
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
     showAll: bool = Query(False),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Get list of available cars"""
     try:
@@ -125,7 +127,11 @@ async def get_cars(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/api/v1/cars/{car_uid}", response_model=CarResponse)
-async def get_car(car_uid: UUID, db: Session = Depends(get_db)):
+async def get_car(
+    car_uid: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+):
     """Get car by UID"""
     car = db.query(Car).filter(Car.car_uid == car_uid).first()
     if not car:
@@ -146,7 +152,8 @@ async def get_car(car_uid: UUID, db: Session = Depends(get_db)):
 async def update_car_availability(
     car_uid: UUID, 
     available: bool = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Update car availability"""
     car = db.query(Car).filter(Car.car_uid == car_uid).first()

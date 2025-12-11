@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -12,6 +12,12 @@ import queue
 import psycopg2
 from enum import Enum
 from threading import Lock
+from services.auth import (
+    AuthenticatedUser,
+    auth_header_for,
+    get_current_user,
+    get_settings,
+)
 
 # FastAPI app
 app = FastAPI(title="Gateway Service", version="1.0.0")
@@ -29,6 +35,11 @@ CARS_SERVICE_URL = os.getenv("CARS_SERVICE_URL", "http://cars-service:8070")
 RENTAL_SERVICE_URL = os.getenv("RENTAL_SERVICE_URL", "http://rental-service:8060")
 PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service:8050")
 PAYMENT_DATABASE_URL = os.getenv("PAYMENT_DATABASE_URL", "postgresql://program:test@postgres:5432/payments")
+AUTH_SETTINGS = get_settings()
+
+# Ensure default audience is the configured issuer if audience is missing.
+if not AUTH_SETTINGS.audience and AUTH_SETTINGS.issuer:
+    AUTH_SETTINGS.audience = AUTH_SETTINGS.issuer.rstrip("/") + "/api/v2/"
 
 # Circuit Breaker Implementation (from lab3)
 class CircuitState(Enum):
@@ -200,6 +211,8 @@ class RetryQueue:
     def _retry_request(self, request_data: dict):
         req_type = request_data.get("type")
         time.sleep(5)
+        token = request_data.get("token")
+        headers = auth_header_for(token) if token else None
 
         if req_type == "cancel_payment":
             payment_uid = request_data.get("data", {}).get("payment_uid")
@@ -209,6 +222,7 @@ class RetryQueue:
             try:
                 response = requests.delete(
                     f"{PAYMENT_SERVICE_URL}/api/v1/payments/{payment_uid}",
+                    headers=headers,
                     timeout=3
                 )
                 if response.status_code in (200, 204):
@@ -228,6 +242,11 @@ class RentalRequest(BaseModel):
     carUid: str
     dateFrom: str
     dateTo: str
+
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+    scope: Optional[str] = None
 
 class CarResponse(BaseModel):
     carUid: str
@@ -252,11 +271,6 @@ class RentalResponse(BaseModel):
     carUid: str
     car: CarResponse
     payment: PaymentResponse
-
-def get_username(x_user_name: str = Header(None)):
-    if not x_user_name:
-        raise HTTPException(status_code=400, detail="X-User-Name header is required")
-    return x_user_name
 
 
 def force_cancel_payment(payment_uid: str) -> bool:
@@ -283,17 +297,104 @@ def force_cancel_payment(payment_uid: str) -> bool:
 async def health_check():
     return {"status": "OK"}
 
+@app.post("/api/v1/authorize")
+async def authorize(auth_request: AuthRequest):
+    """Exchange user credentials for tokens using Resource Owner Password flow."""
+    token_url = AUTH_SETTINGS.token_url
+    if not token_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC token endpoint is not configured",
+        )
+
+    # Auth0 requires password-realm grant type when no default connection is configured.
+    # For other providers, the classic password grant with a connection parameter still works.
+    connection_name = AUTH_SETTINGS.realm or "Username-Password-Authentication"
+    grant_type = "password"
+    use_realm = "auth0.com" in token_url or AUTH_SETTINGS.realm is not None
+
+    data = {
+        "grant_type": grant_type,
+        "client_id": AUTH_SETTINGS.client_id,
+        "client_secret": AUTH_SETTINGS.client_secret,
+        "username": auth_request.username,
+        "password": auth_request.password,
+        "scope": auth_request.scope or AUTH_SETTINGS.scope,
+    }
+
+    if use_realm:
+        data["grant_type"] = "http://auth0.com/oauth/grant-type/password-realm"
+        data["realm"] = connection_name
+    else:
+        data["connection"] = connection_name
+
+    # Add audience if configured (required for Auth0 to return JWT access_token)
+    if AUTH_SETTINGS.audience:
+        data["audience"] = AUTH_SETTINGS.audience
+
+    try:
+        response = requests.post(token_url, data=data, timeout=10)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+
+    if response.status_code >= 400:
+        error_detail = response.text
+        try:
+            error_json = response.json()
+            error_detail = error_json.get("error_description", error_json.get("error", "Authorization failed"))
+        except:
+            pass
+        raise HTTPException(status_code=response.status_code, detail=error_detail)
+
+    return response.json()
+
+@app.get("/api/v1/callback")
+async def callback(code: Optional[str] = None, state: Optional[str] = None):
+    """
+    Optional callback handler for Authorization Code flow.
+    When code is provided, it is exchanged for tokens; otherwise a simple OK response is returned.
+    """
+    if not code:
+        return {"status": "ok"}
+
+    token_url = AUTH_SETTINGS.token_url
+    if not token_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC token endpoint is not configured",
+        )
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": AUTH_SETTINGS.redirect_uri,
+        "client_id": AUTH_SETTINGS.client_id,
+        "client_secret": AUTH_SETTINGS.client_secret,
+    }
+
+    try:
+        response = requests.post(token_url, data=data, timeout=10)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail="Token exchange failed")
+
+    return response.json()
+
 @app.get("/api/v1/cars")
 async def get_cars(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    show_all: bool = Query(False)
+    show_all: bool = Query(False),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Get list of available cars"""
     try:
         response = requests.get(
             f"{CARS_SERVICE_URL}/api/v1/cars",
             params={"page": page, "pageSize": size, "showAll": show_all},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if response.status_code == 200:
@@ -304,10 +405,14 @@ async def get_cars(
         raise HTTPException(status_code=503, detail="Cars service unavailable")
 
 @app.get("/api/v1/cars/{car_uid}")
-async def get_car(car_uid: str):
+async def get_car(car_uid: str, user: AuthenticatedUser = Depends(get_current_user)):
     """Get car by UID"""
     try:
-        response = requests.get(f"{CARS_SERVICE_URL}/api/v1/cars/{car_uid}", timeout=5)
+        response = requests.get(
+            f"{CARS_SERVICE_URL}/api/v1/cars/{car_uid}",
+            headers=auth_header_for(user.token),
+            timeout=5
+        )
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 404:
@@ -319,7 +424,7 @@ async def get_car(car_uid: str):
 
 @app.get("/api/v1/rental")
 async def get_rentals(
-    username: str = Depends(get_username),
+    user: AuthenticatedUser = Depends(get_current_user),
     page: int = Query(0, ge=0),
     page_size: int = Query(20, ge=1, le=100)
 ):
@@ -328,7 +433,7 @@ async def get_rentals(
         response = requests.get(
             f"{RENTAL_SERVICE_URL}/api/v1/rental",
             params={"page": page, "pageSize": page_size},
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if response.status_code != 200:
@@ -339,7 +444,11 @@ async def get_rentals(
         
         for item in items:
             try:
-                car_response = requests.get(f"{CARS_SERVICE_URL}/api/v1/cars/{item['carUid']}", timeout=3)
+                car_response = requests.get(
+                    f"{CARS_SERVICE_URL}/api/v1/cars/{item['carUid']}",
+                    headers=auth_header_for(user.token),
+                    timeout=3
+                )
                 if car_response.status_code == 200:
                     car_data = car_response.json()
                     item["car"] = {
@@ -354,7 +463,11 @@ async def get_rentals(
                 item["car"] = {"carUid": item["carUid"]}
             
             try:
-                payment_response = requests.get(f"{PAYMENT_SERVICE_URL}/api/v1/payments/{item['paymentUid']}", timeout=3)
+                payment_response = requests.get(
+                    f"{PAYMENT_SERVICE_URL}/api/v1/payments/{item['paymentUid']}",
+                    headers=auth_header_for(user.token),
+                    timeout=3
+                )
                 if payment_response.status_code == 200:
                     item["payment"] = payment_response.json()
                 elif payment_response.status_code == 404:
@@ -375,12 +488,12 @@ async def get_rentals(
         raise HTTPException(status_code=503, detail="Rental service unavailable")
 
 @app.get("/api/v1/rental/{rental_uid}")
-async def get_rental(rental_uid: str, username: str = Depends(get_username)):
+async def get_rental(rental_uid: str, user: AuthenticatedUser = Depends(get_current_user)):
     """Get rental by UID"""
     try:
         response = requests.get(
             f"{RENTAL_SERVICE_URL}/api/v1/rental/{rental_uid}",
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if response.status_code == 404:
@@ -391,7 +504,11 @@ async def get_rental(rental_uid: str, username: str = Depends(get_username)):
         rental_data = response.json()
         
         try:
-            car_response = requests.get(f"{CARS_SERVICE_URL}/api/v1/cars/{rental_data['carUid']}", timeout=3)
+            car_response = requests.get(
+                f"{CARS_SERVICE_URL}/api/v1/cars/{rental_data['carUid']}",
+                headers=auth_header_for(user.token),
+                timeout=3
+            )
             if car_response.status_code == 200:
                 car_data = car_response.json()
                 rental_data["car"] = {
@@ -406,7 +523,11 @@ async def get_rental(rental_uid: str, username: str = Depends(get_username)):
             rental_data["car"] = {"carUid": rental_data["carUid"]}
         
         try:
-            payment_response = requests.get(f"{PAYMENT_SERVICE_URL}/api/v1/payments/{rental_data['paymentUid']}", timeout=3)
+            payment_response = requests.get(
+                f"{PAYMENT_SERVICE_URL}/api/v1/payments/{rental_data['paymentUid']}",
+                headers=auth_header_for(user.token),
+                timeout=3
+            )
             if payment_response.status_code == 200:
                 rental_data["payment"] = payment_response.json()
             elif payment_response.status_code == 404:
@@ -427,11 +548,18 @@ async def get_rental(rental_uid: str, username: str = Depends(get_username)):
         raise HTTPException(status_code=503, detail="Rental service unavailable")
 
 @app.post("/api/v1/rental")
-async def create_rental(rental_request: RentalRequest, username: str = Depends(get_username)):
+async def create_rental(
+    rental_request: RentalRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
     """Create new rental - order according to README lab4: reserve car -> create rental -> create payment"""
     try:
         # Step 1: Check if car exists and reserve it (availability = false)
-        car_response = requests.get(f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}", timeout=5)
+        car_response = requests.get(
+            f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}",
+            headers=auth_header_for(user.token),
+            timeout=5
+        )
         if car_response.status_code != 200:
             raise HTTPException(status_code=404, detail="Car not found")
         
@@ -443,6 +571,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
         car_reserve_response = requests.patch(
             f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}/availability",
             params={"available": False},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if car_reserve_response.status_code != 200:
@@ -464,6 +593,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
                     requests.patch(
                         f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}/availability",
                         params={"available": True},
+                        headers=auth_header_for(user.token),
                         timeout=3
                     )
                 except:
@@ -484,6 +614,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
                     requests.patch(
                         f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}/availability",
                         params={"available": True},
+                        headers=auth_header_for(user.token),
                         timeout=3
                     )
                 except:
@@ -499,6 +630,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
             payment_response = requests.post(
                 f"{PAYMENT_SERVICE_URL}/api/v1/payments",
                 json=payment_data,
+                headers=auth_header_for(user.token),
                 timeout=5
             )
             if payment_response.status_code != 201:
@@ -514,6 +646,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
                 requests.patch(
                     f"{CARS_SERVICE_URL}/api/v1/cars/{rental_request.carUid}/availability",
                     params={"available": True},
+                    headers=auth_header_for(user.token),
                     timeout=3
                 )
             except:
@@ -533,7 +666,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
         rental_response = requests.post(
             f"{RENTAL_SERVICE_URL}/api/v1/rental",
             json=rental_data,
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if rental_response.status_code != 200:
@@ -546,6 +679,7 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
                 )
                 requests.delete(
                     f"{PAYMENT_SERVICE_URL}/api/v1/payments/{payment_info['paymentUid']}",
+                    headers=auth_header_for(user.token),
                     timeout=3
                 )
             except:
@@ -569,12 +703,12 @@ async def create_rental(rental_request: RentalRequest, username: str = Depends(g
         raise HTTPException(status_code=503, detail="Service unavailable")
 
 @app.post("/api/v1/rental/{rental_uid}/finish")
-async def finish_rental(rental_uid: str, username: str = Depends(get_username)):
+async def finish_rental(rental_uid: str, user: AuthenticatedUser = Depends(get_current_user)):
     """Finish rental"""
     try:
         rental_response = requests.get(
             f"{RENTAL_SERVICE_URL}/api/v1/rental/{rental_uid}",
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if rental_response.status_code == 404:
@@ -590,6 +724,7 @@ async def finish_rental(rental_uid: str, username: str = Depends(get_username)):
             requests.patch(
                 f"{CARS_SERVICE_URL}/api/v1/cars/{car_uid}/availability",
                 params={"available": True},
+                headers=auth_header_for(user.token),
                 timeout=3
             )
         except:
@@ -598,7 +733,7 @@ async def finish_rental(rental_uid: str, username: str = Depends(get_username)):
         # Update rental status
         finish_response = requests.post(
             f"{RENTAL_SERVICE_URL}/api/v1/rental/{rental_uid}/finish",
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if finish_response.status_code == 204:
@@ -612,12 +747,12 @@ async def finish_rental(rental_uid: str, username: str = Depends(get_username)):
         raise HTTPException(status_code=503, detail="Rental service unavailable")
 
 @app.delete("/api/v1/rental/{rental_uid}")
-async def cancel_rental(rental_uid: str, username: str = Depends(get_username)):
+async def cancel_rental(rental_uid: str, user: AuthenticatedUser = Depends(get_current_user)):
     """Cancel rental with failover support."""
     try:
         rental_response = requests.get(
             f"{RENTAL_SERVICE_URL}/api/v1/rental/{rental_uid}",
-            headers={"X-User-Name": username},
+            headers=auth_header_for(user.token),
             timeout=5
         )
         if rental_response.status_code == 404:
@@ -633,6 +768,7 @@ async def cancel_rental(rental_uid: str, username: str = Depends(get_username)):
             requests.patch(
                 f"{CARS_SERVICE_URL}/api/v1/cars/{car_uid}/availability",
                 params={"available": True},
+                headers=auth_header_for(user.token),
                 timeout=3
             )
         except requests.RequestException as e:
@@ -645,7 +781,7 @@ async def cancel_rental(rental_uid: str, username: str = Depends(get_username)):
             try:
                 cancel_response = requests.delete(
                     f"{RENTAL_SERVICE_URL}/api/v1/rental/{rental_uid}",
-                    headers={"X-User-Name": username},
+                    headers=auth_header_for(user.token),
                     timeout=2
                 )
                 if cancel_response.status_code == 204:
@@ -663,6 +799,7 @@ async def cancel_rental(rental_uid: str, username: str = Depends(get_username)):
             try:
                 payment_cancel_response = requests.delete(
                     f"{PAYMENT_SERVICE_URL}/api/v1/payments/{payment_uid}",
+                    headers=auth_header_for(user.token),
                     timeout=2
                 )
                 if payment_cancel_response.status_code in (200, 204):
@@ -682,7 +819,8 @@ async def cancel_rental(rental_uid: str, username: str = Depends(get_username)):
                 {
                     "type": "cancel_payment",
                     "data": {"payment_uid": payment_uid},
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "token": user.token,
                 }
             )
         

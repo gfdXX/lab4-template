@@ -1,56 +1,76 @@
-# Лабораторная работа #4
+# Лабораторная работа #5
 
 ![GitHub Classroom Workflow](../../workflows/GitHub%20Classroom%20Workflow/badge.svg?branch=master)
 
-## Deploy to Cloud
+## OAuth2 Authorization
 
 ### Формулировка
 
-На базе [Лабораторной работы #2](https://github.com/bmstu-rsoi/lab2-template) выполнить деплой приложения в managed
-кластер k8s.
+На базе [Лабораторной работы #4](https://github.com/bmstu-rsoi/lab2-template) реализовать OAuth2 token-based
+авторизацию.
+
+* Для авторизации использовать OpenID Connect, в роли Identity Provider использовать стороннее решение.
+* На Identity Provider настроить
+  использование [Resource Owner Password flow](https://auth0.com/docs/authorization/flows/resource-owner-password-flow)
+  (в одном запросе передается `clientId`, `clientSecret`, `username`, `password`).
+* Все методы `/api/**` (кроме `/api/v1/authorize` и `/api/v1/callback`) на всех сервисах закрыть token-based
+  авторизацией.
+* В качестве токена использовать [JWT](https://jwt.io/introduction), для валидации токена
+  использовать [JWKs](https://auth0.com/docs/security/tokens/json-web-tokens/json-web-key-sets), _запрос к Identity
+  Provider делать не нужно_.
+* JWT токен пробрасывать между сервисами, при получении запроса валидацию токена так же реализовать через JWKs.
+* Убрать заголовок `X-User-Name` и получать пользователя из JWT-токена.
+* Если авторизация некорректная (отсутствие токена, ошибка валидации JWT токена, закончилось время жизни токена
+  (поле `exp` в payload)), то отдавать 401 ошибку.
+* В `scope` достаточно указывать `openid profile email`.
 
 ### Требования
 
-1. Скопировать исходный код из ЛР #2 в проект.
-2. Развернуть руками свой Managed Kubernetes Cluster, настроить Ingress Controller (для публикации сервисов наружу можно
-   использовать _только_ Ingress).
-4. Собрать и опубликовать образы docker в [Docker Registry](https://hub.docker.com/).
-5. Описать манифесты для деплоя в виде [helm charts](https://helm.sh/docs/topics/charts/), они должен быть универсальным
-   для всех сервисов и отличаться лишь набором параметров запуска.
-6. В кластере k8s можно использовать один физический instance базы, но каждый сервис должен работать только со своей
-   виртуальной базой данных. Задеплоить базу в кластер можно руками, либо использовать уже готовый helm chart.
-7. Код хранить на Github, для сборки использовать Github Actions.
-8. Для автоматических прогонов тестов в файле [autograding.json](.github/classroom/autograding.json)
+1. Для автоматических прогонов тестов в файле [autograding.json](.github/classroom/autograding.json)
    и [classroom.yml](.github/workflows/classroom.yml) заменить `<variant>` на ваш вариант.
-9. В [classroom.yml](.github/workflows/classroom.yml) дописать шаги:
-    1. сборка приложения;
-    2. сборка и публикация образа docker (можно использовать `docker compose build`, `docker compose push`);
-    3. деплой каждого сервиса в кластер k8s.
+1. Код хранить на Github, для сборки использовать Github Actions.
+1. Каждый сервис должен быть завернут в docker.
+1. В classroom.yml дописать шаги на сборку, прогон unit-тестов.
 
 ### Пояснения
 
-1. Т.к. развертывание полноценного кластера на виртуальным машинах очень сложный процесс, можно использовать Managed
-Kubernetes Cluster, т.е. готовый кластер k8s, предоставляемый сторонней платформой, например:
-   * [Digital Ocean](https://www.digitalocean.com/products/kubernetes/)
-   * [Yandex Cloud](https://cloud.yandex.ru/services/managed-kubernetes)
-   * [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine)
-   * [AWS](https://aws.amazon.com/ru/eks/)
+1. В роли Identity Provider можно использовать любое решение, вот несколько рабочих вариантов:
+    1. [Okta](https://developer.okta.com/docs/guides/)
+    2. [Auth0](https://auth0.com/developers)
+2. Для получения metadata для OpenID Connect можно
+   использовать [Well-Known URI](https://auth0.com/docs/security/tokens/json-web-tokens/locate-json-web-key-sets):
+   `https://[base-server-url]/.well-known/openid-configuration`.
+3. Из Well-Known metadata можно получить Issuer URI и JWKs URI.
+4. Для реализации OAuth2 можно использовать сторонние библиотеки.
 
-2. Платформ, которые предоставляют Kubernetes as a Service большое количество, вы можете сами исследовать рынок и выбрать
-другого провайдера услуг. Большинство провайдеров имеют бесплатный триальный период или денежный грант.
+### Настройка OAuth2/OIDC
 
-3. Для создания кластера достаточно 2-3 worker ноды 2Gb, 1CPU.
+Сервисы теперь принимают только запросы с заголовком `Authorization: Bearer <jwt>`. Валидируется подпись и срок
+действия токена по JWKs (без запросов к Identity Provider). Пользовательское имя берется из claim
+`preferred_username` / `email` / `name` / `sub` и используется в rental-service.
 
-4. Для проверки отказоустойчивости используется остановка и запуск контейнеров docker, это делает
-   скрипт [test-script.sh](scripts/test-script.sh). Скрипт нужно запускать из корня проекта, т.к. он обращается к папке
-   postman по вариантам.
-   ```shell
-   # запуск тестового сценария:
-   # * <variant> – номер варианта (v1 | v2 | v3 | v4 )
-   # * <deployment> – имя deployment в кластере k8s
-   # * <namespace>    – namespace кластера, в котором развёрнуты сервисы (по умолчанию default)
-   $ ./scripts/test-script.sh <variant> <deployment> <k8s namespace>
-   ```
+Переменные окружения (для всех сервисов):
+* `OIDC_ISSUER` — issuer, который проверяется в токене.
+* `OIDC_AUDIENCE` — aud, который проверяется в токене (по умолчанию = `OIDC_CLIENT_ID`).
+* `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` — учётные данные клиента в IdP.
+* `OIDC_TOKEN_URL` — endpoint токенов (используется в `/api/v1/authorize` и `/api/v1/callback`).
+* `OIDC_WELL_KNOWN_URL` — опционально, если хотите подтянуть metadata и jwks при старте.
+* `OIDC_JWKS` или `OIDC_JWKS_URL` — статичный набор ключей либо ссылка на JWKS (используется только для валидации).
+* `OIDC_SCOPE` — запрашиваемые scope, по умолчанию `openid profile email`.
+* `OIDC_REDIRECT_URI` — redirect_uri для обмена кода в `/api/v1/callback` (если используете auth code flow).
+
+Как работает поток:
+1. Получить токен через `/api/v1/authorize` (Resource Owner Password) или напрямую у IdP.
+2. Все запросы к `/api/**` отправлять с `Authorization: Bearer <jwt>`.
+3. Gateway пробрасывает токен дальше в cars/rental/payment, а сами сервисы валидируют JWT по JWKs.
+
+### Быстрый запуск локально
+
+1. Заполните переменные окружения из блока выше (можно через `.env`).
+2. Соберите и поднимите всё: `docker compose up --build`.
+3. Получите токен: `curl -X POST http://localhost:8080/api/v1/authorize -d "username=<u>&password=<p>&client_id=$OIDC_CLIENT_ID&client_secret=$OIDC_CLIENT_SECRET"`.
+4. Используйте токен во всех запросах, например:  
+   `curl -H "Authorization: Bearer <token>" "http://localhost:8080/api/v1/cars?page=1&size=10"`.
 
 ### Прием задания
 

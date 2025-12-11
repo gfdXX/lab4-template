@@ -4,6 +4,9 @@ from unittest.mock import patch, MagicMock
 import uuid
 import os
 from datetime import datetime
+from services.test_utils import ensure_test_jwks, auth_headers
+
+ensure_test_jwks()
 
 # Set test environment variable to avoid database connection
 os.environ['DATABASE_URL'] = 'sqlite:///test.db'
@@ -23,14 +26,14 @@ def test_health_check():
 def test_get_rentals_missing_header():
     """Test rentals endpoint without required X-User-Name header"""
     response = client.get("/api/v1/rental")
-    assert response.status_code == 400
-    assert "X-User-Name header is required" in response.json()["detail"]
+    assert response.status_code == 401
+    assert "Authorization header" in response.json()["detail"]
 
 def test_get_rental_missing_header():
     """Test single rental endpoint without required header"""
     test_uuid = uuid.uuid4()
     response = client.get(f"/api/v1/rental/{test_uuid}")
-    assert response.status_code == 400
+    assert response.status_code == 401
 
 def test_create_rental_endpoint():
     """Test rental creation endpoint exists"""
@@ -39,7 +42,8 @@ def test_create_rental_endpoint():
         "dateFrom": "2024-01-01",
         "dateTo": "2024-01-05"
     }
-    response = client.post("/api/v1/rental", json=rental_data, headers={"X-User-Name": "testuser"})
-    # Should return some response (404, 503, etc.) - endpoint exists
-    assert response.status_code >= 400  # Any error response is fine
+    response = client.post("/api/v1/rental", json=rental_data, headers=auth_headers())
+    # Should return some response (404, 500, etc.) - endpoint exists and requires auth
+    assert response.status_code >= 400
+    assert response.status_code != 401
 

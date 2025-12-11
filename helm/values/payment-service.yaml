@@ -10,6 +10,26 @@ service:
 env:
   - name: DATABASE_URL
     value: "postgresql://program:test@postgres:5432/payments"
+  - name: OIDC_ISSUER
+    value: ""
+  - name: OIDC_AUDIENCE
+    value: ""
+  - name: OIDC_CLIENT_ID
+    value: ""
+  - name: OIDC_CLIENT_SECRET
+    value: ""
+  - name: OIDC_TOKEN_URL
+    value: ""
+  - name: OIDC_WELL_KNOWN_URL
+    value: ""
+  - name: OIDC_JWKS
+    value: ""
+  - name: OIDC_JWKS_URL
+    value: ""
+  - name: OIDC_SCOPE
+    value: "openid profile email"
+  - name: OIDC_REDIRECT_URI
+    value: ""
 
 command:
   - uvicorn

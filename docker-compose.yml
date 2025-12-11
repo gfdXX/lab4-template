@@ -29,6 +29,16 @@ services:
     restart: on-failure
     environment:
       DATABASE_URL: postgresql://program:test@postgres:5432/cars
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_TOKEN_URL: ${OIDC_TOKEN_URL}
+      OIDC_WELL_KNOWN_URL: ${OIDC_WELL_KNOWN_URL}
+      OIDC_JWKS: ${OIDC_JWKS}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
     ports:
       - "8070:8070"
     depends_on:
@@ -41,6 +51,16 @@ services:
     restart: on-failure
     environment:
       DATABASE_URL: postgresql://program:test@postgres:5432/rentals
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_TOKEN_URL: ${OIDC_TOKEN_URL}
+      OIDC_WELL_KNOWN_URL: ${OIDC_WELL_KNOWN_URL}
+      OIDC_JWKS: ${OIDC_JWKS}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
     ports:
       - "8060:8060"
     depends_on:
@@ -54,6 +74,16 @@ services:
     restart: on-failure
     environment:
       DATABASE_URL: postgresql://program:test@postgres:5432/payments
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_TOKEN_URL: ${OIDC_TOKEN_URL}
+      OIDC_WELL_KNOWN_URL: ${OIDC_WELL_KNOWN_URL}
+      OIDC_JWKS: ${OIDC_JWKS}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
     ports:
       - "8050:8050"
     depends_on:
@@ -68,6 +98,16 @@ services:
       CARS_SERVICE_URL: http://cars-service:8070
       RENTAL_SERVICE_URL: http://rental-service:8060
       PAYMENT_SERVICE_URL: http://payment-service:8050
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_TOKEN_URL: ${OIDC_TOKEN_URL}
+      OIDC_WELL_KNOWN_URL: ${OIDC_WELL_KNOWN_URL}
+      OIDC_JWKS: ${OIDC_JWKS}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
     ports:
       - "8080:8080"
     depends_on:
