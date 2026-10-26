@@ -1,63 +1,43 @@
-# Лабораторная работа #4
+# РСОИ, ЛР4: деплой микросервисов в Kubernetes
 
-![GitHub Classroom Workflow](../../workflows/GitHub%20Classroom%20Workflow/badge.svg?branch=master)
+![Python](https://img.shields.io/badge/Python-FastAPI-009688?logo=fastapi&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm-326CE5?logo=kubernetes&logoColor=white)
+![Docker Hub](https://img.shields.io/badge/Docker_Hub-images-2496ED?logo=docker&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=githubactions&logoColor=white)
 
-## Deploy to Cloud
+Лабораторная работа №4 по курсу «Распределённые системы обработки информации», МГТУ им. Н.Э. Баумана (осень 2025).
 
-### Формулировка
+> **Код решения — в ветке [`test`](https://github.com/gfdXX/lab4-template/tree/test).**
+> В `master` лежит исходный шаблон курса, условие задания — в [ASSIGNMENT.md](ASSIGNMENT.md).
 
-На базе [Лабораторной работы #2](https://github.com/bmstu-rsoi/lab2-template) выполнить деплой приложения в managed
-кластер k8s.
+## Что сделано
 
-### Требования
+Сервис аренды автомобилей из [ЛР2](https://github.com/gfdXX/lab2-template) развёрнут в managed-кластере Kubernetes:
 
-1. Скопировать исходный код из ЛР #2 в проект.
-2. Развернуть руками свой Managed Kubernetes Cluster, настроить Ingress Controller (для публикации сервисов наружу можно
-   использовать _только_ Ingress).
-4. Собрать и опубликовать образы docker в [Docker Registry](https://hub.docker.com/).
-5. Описать манифесты для деплоя в виде [helm charts](https://helm.sh/docs/topics/charts/), они должен быть универсальным
-   для всех сервисов и отличаться лишь набором параметров запуска.
-6. В кластере k8s можно использовать один физический instance базы, но каждый сервис должен работать только со своей
-   виртуальной базой данных. Задеплоить базу в кластер можно руками, либо использовать уже готовый helm chart.
-7. Код хранить на Github, для сборки использовать Github Actions.
-8. Для автоматических прогонов тестов в файле [autograding.json](.github/classroom/autograding.json)
-   и [classroom.yml](.github/workflows/classroom.yml) заменить `<variant>` на ваш вариант.
-9. В [classroom.yml](.github/workflows/classroom.yml) дописать шаги:
-    1. сборка приложения;
-    2. сборка и публикация образа docker (можно использовать `docker compose build`, `docker compose push`);
-    3. деплой каждого сервиса в кластер k8s.
+- **Helm-чарты** (`helm/`): один универсальный `service-chart` (Deployment, Service, Ingress) для всех четырёх сервисов, отличия задаются файлами `helm/values/*.yaml`; отдельный `postgres-chart` с PVC, ConfigMap и Job для создания баз;
+- **Ingress** — единственная точка публикации сервисов наружу;
+- **CI/CD в GitHub Actions**: unit-тесты → сборка и публикация образов в Docker Hub → `helm upgrade --install` в кластер (kubeconfig берётся из секретов репозитория) → автопроверка API курса через `port-forward` к Gateway;
+- у каждого сервиса своя логическая база в одном экземпляре PostgreSQL.
 
-### Пояснения
+## Запуск
 
-1. Т.к. развертывание полноценного кластера на виртуальным машинах очень сложный процесс, можно использовать Managed
-Kubernetes Cluster, т.е. готовый кластер k8s, предоставляемый сторонней платформой, например:
-   * [Digital Ocean](https://www.digitalocean.com/products/kubernetes/)
-   * [Yandex Cloud](https://cloud.yandex.ru/services/managed-kubernetes)
-   * [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine)
-   * [AWS](https://aws.amazon.com/ru/eks/)
+Локально — как в ЛР2:
 
-2. Платформ, которые предоставляют Kubernetes as a Service большое количество, вы можете сами исследовать рынок и выбрать
-другого провайдера услуг. Большинство провайдеров имеют бесплатный триальный период или денежный грант.
+```bash
+git clone -b test https://github.com/gfdXX/lab4-template.git
+cd lab4-template
+docker compose up --build
+```
 
-3. Для создания кластера достаточно 2-3 worker ноды 2Gb, 1CPU.
+В кластер (нужны `kubectl` и `helm` с доступом к кластеру):
 
-4. Для проверки отказоустойчивости используется остановка и запуск контейнеров docker, это делает
-   скрипт [test-script.sh](scripts/test-script.sh). Скрипт нужно запускать из корня проекта, т.к. он обращается к папке
-   postman по вариантам.
-   ```shell
-   # запуск тестового сценария:
-   # * <variant> – номер варианта (v1 | v2 | v3 | v4 )
-   # * <deployment> – имя deployment в кластере k8s
-   # * <namespace>    – namespace кластера, в котором развёрнуты сервисы (по умолчанию default)
-   $ ./scripts/test-script.sh <variant> <deployment> <k8s namespace>
-   ```
+```bash
+helm upgrade --install postgres ./helm/postgres-chart -n test --create-namespace
+helm upgrade --install gateway-service ./helm/service-chart -f helm/values/gateway-service.yaml -n test
+```
 
-### Прием задания
+Остальные сервисы ставятся тем же чартом со своими файлами значений.
 
-1. При получении задания у вас создается fork этого репозитория для вашего пользователя.
-2. После того как все тесты успешно завершатся, в Github Classroom на Dashboard будет отмечено успешное выполнение
-   тестов.
+## Автор
 
-### Варианты заданий
-
-Распределение вариантов заданий аналогично [ЛР #2](https://github.com/bmstu-rsoi/lab2-template).
+Салженикин Даниил, МГТУ им. Н.Э. Баумана.
