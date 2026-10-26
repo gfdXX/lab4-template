@@ -1,0 +1,21 @@
+fullnameOverride: cars-service
+
+image:
+  repository: ""  # Will be set in CI/CD
+  tag: "latest"
+
+service:
+  port: 8070
+
+env:
+  - name: DATABASE_URL
+    value: "postgresql://program:test@postgres:5432/cars"
+
+command:
+  - uvicorn
+  - services.cars_service.main:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8070"
+

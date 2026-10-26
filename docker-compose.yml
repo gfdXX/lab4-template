@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: library/postgres:13
+    container_name: postgres
+    restart: on-failure
+    environment:
+      POSTGRES_USER: program
+      POSTGRES_PASSWORD: "test"
+      POSTGRES_DB: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  db-init:
+    image: library/postgres:13
+    container_name: db-init
+    depends_on:
+      - postgres
+    environment:
+      PGPASSWORD: "test"
+    volumes:
+      - ./postgres/init-databases.sh:/init-databases.sh
+    command: ["bash", "/init-databases.sh"]
+
+  cars-service:
+    build: .
+    container_name: cars-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql://program:test@postgres:5432/cars
+    ports:
+      - "8070:8070"
+    depends_on:
+      - db-init
+    command: ["uvicorn", "services.cars_service.main:app", "--host", "0.0.0.0", "--port", "8070"]
+
+  rental-service:
+    build: .
+    container_name: rental-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql://program:test@postgres:5432/rentals
+    ports:
+      - "8060:8060"
+    depends_on:
+      - db-init
+      - cars-service
+    command: ["uvicorn", "services.rental_service.main:app", "--host", "0.0.0.0", "--port", "8060"]
+
+  payment-service:
+    build: .
+    container_name: payment-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql://program:test@postgres:5432/payments
+    ports:
+      - "8050:8050"
+    depends_on:
+      - db-init
+    command: ["uvicorn", "services.payment_service.main:app", "--host", "0.0.0.0", "--port", "8050"]
+
+  gateway-service:
+    build: .
+    container_name: gateway-service
+    restart: on-failure
+    environment:
+      CARS_SERVICE_URL: http://cars-service:8070
+      RENTAL_SERVICE_URL: http://rental-service:8060
+      PAYMENT_SERVICE_URL: http://payment-service:8050
+    ports:
+      - "8080:8080"
+    depends_on:
+      - cars-service
+      - rental-service
+      - payment-service
+    command: ["uvicorn", "services.gateway_service.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+volumes:
+  db-data:
+

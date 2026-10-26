@@ -1,0 +1,33 @@
+# Default values for postgres-chart
+
+fullnameOverride: postgres
+
+replicaCount: 1
+
+image:
+  repository: library/postgres
+  pullPolicy: IfNotPresent
+  tag: "13"
+
+postgres:
+  user: program
+  password: test
+  database: postgres
+
+service:
+  type: ClusterIP
+  port: 5432
+
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClass: ""
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+

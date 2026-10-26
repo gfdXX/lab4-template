@@ -3,8 +3,45 @@
 	"name": "[rsoi][local] Car Rental System",
 	"values": [
 		{
+			"type": "text",
 			"key": "baseUrl",
 			"value": "http://localhost:8080",
+			"enabled": true
+		},
+		{
+			"type": "text",
+			"key": "carUid",
+			"value": "109b42f3-198d-4c89-9276-a7520a7120ab",
+			"enabled": true
+		},
+		{
+			"type": "text",
+			"key": "username",
+			"value": "Test Max",
+			"enabled": true
+		},
+		{
+			"type": "any",
+			"key": "rentalPrice",
+			"value": 3500,
+			"enabled": true
+		},
+		{
+			"type": "text",
+			"key": "dateFrom",
+			"value": "2021-10-08",
+			"enabled": true
+		},
+		{
+			"type": "text",
+			"key": "dateTo",
+			"value": "2021-10-11",
+			"enabled": true
+		},
+		{
+			"type": "text",
+			"key": "rentalUid",
+			"value": "eaa09775-9de2-43a0-ab20-b9aa4e406b7a",
 			"enabled": true
 		}
 	],
